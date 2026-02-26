@@ -1,0 +1,28 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Environment variables
+.env
+backend/.env
+
+# Python
+__pycache__/
+*.pyc
+ml-api/venv/
+ml-api/.venv/
+ml-training/venv/
+.pytest_cache/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+npm-debug.log
+yarn-error.log
