@@ -10,6 +10,7 @@ const {
     rejectLoan,
     generateLoanPDF,
     getBlockchainTransactions,
+    getManagerDocument,
 } = require("../controllers/managerController");
 
 // All routes require authentication + bank_manager or admin role
@@ -28,6 +29,9 @@ router.put("/loan/:id/reject", rejectLoan);
 
 // PDF
 router.get("/loan/:id/pdf", generateLoanPDF);
+
+// Documents
+router.get("/document/:filename", getManagerDocument);
 
 // Blockchain Transactions
 router.get("/blockchain/transactions", getBlockchainTransactions);

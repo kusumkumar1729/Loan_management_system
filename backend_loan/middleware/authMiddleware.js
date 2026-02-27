@@ -4,15 +4,21 @@ const User = require("../models/User");
 const protect = async (req, res, next) => {
     let token;
 
-    // 1️⃣ Check if Authorization header exists
+    // 1️⃣ Check Authorization header first
     if (
         req.headers.authorization &&
         req.headers.authorization.startsWith("Bearer")
     ) {
-        try {
-            // 2️⃣ Extract token
-            token = req.headers.authorization.split(" ")[1];
+        token = req.headers.authorization.split(" ")[1];
+    }
 
+    // 2️⃣ Fallback: check query parameter (for img/iframe/embed tags)
+    if (!token && req.query.token) {
+        token = req.query.token;
+    }
+
+    if (token) {
+        try {
             // 3️⃣ Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

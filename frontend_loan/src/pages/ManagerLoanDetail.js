@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminAPI from "../adminApi";
 import {
     CheckCircle, XCircle, ArrowLeft, FileText, Download,
-    AlertTriangle, Shield, TrendingUp, IndianRupee, User,
-    MapPin, Landmark, Hash, Clock
+    Shield, TrendingUp, IndianRupee, User,
+    MapPin, Landmark, Hash, Clock, Eye, X
 } from "lucide-react";
 
 const ManagerLoanDetail = () => {
@@ -32,17 +32,15 @@ const ManagerLoanDetail = () => {
 
     const [actionLoading, setActionLoading] = useState(false);
 
-    useEffect(() => {
-        fetchLoanDetail();
-    }, [id]);
+    // Document preview state
+    const [previewDoc, setPreviewDoc] = useState(null);
 
-    const fetchLoanDetail = async () => {
+    const fetchLoanDetail = useCallback(async () => {
         try {
             const { data } = await AdminAPI.get(`/manager/loan/${id}`);
             setLoan(data.loan);
             setAuditTrail(data.auditTrail || []);
 
-            // Pre-fill approve data
             setApproveData(prev => ({
                 ...prev,
                 approvedAmount: data.loan.approvedAmount || data.loan.loanAmount,
@@ -53,7 +51,11 @@ const ManagerLoanDetail = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
+
+    useEffect(() => {
+        fetchLoanDetail();
+    }, [fetchLoanDetail]);
 
     const handleApprove = async () => {
         setActionLoading(true);
@@ -100,6 +102,33 @@ const ManagerLoanDetail = () => {
         }
     };
 
+    const openDocPreview = async (docType, filename) => {
+        if (!filename) return;
+        try {
+            const response = await AdminAPI.get(`/manager/document/${filename}`, {
+                responseType: "blob",
+            });
+            const blobUrl = window.URL.createObjectURL(response.data);
+            setPreviewDoc({ name: docType, filename, blobUrl, mimeType: response.data.type });
+        } catch (error) {
+            console.error("Document fetch error:", error);
+            alert("Failed to load document. It may have been deleted.");
+        }
+    };
+
+    const isImage = (filename, mimeType) => {
+        if (mimeType) return mimeType.startsWith("image/");
+        if (!filename) return false;
+        const ext = filename.split(".").pop().toLowerCase();
+        return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+    };
+
+    const isPdf = (filename, mimeType) => {
+        if (mimeType) return mimeType === "application/pdf";
+        if (!filename) return false;
+        return filename.split(".").pop().toLowerCase() === "pdf";
+    };
+
     if (loading) return <div className="text-center py-20">Loading...</div>;
     if (!loan) return <div className="text-center py-20 text-red-500">Loan not found</div>;
 
@@ -107,6 +136,14 @@ const ManagerLoanDetail = () => {
         if (level === "Low") return "bg-green-100 text-green-700";
         if (level === "Medium") return "bg-yellow-100 text-yellow-700";
         return "bg-red-100 text-red-700";
+    };
+
+    const docLabels = {
+        adangal: "Adangal (Land Record)",
+        incomeCertificate: "Income Certificate",
+        aadhaar: "Aadhaar Card",
+        pan: "PAN Card",
+        photo: "Passport Photo",
     };
 
     return (
@@ -202,21 +239,36 @@ const ManagerLoanDetail = () => {
                 </DetailCard>
             </div>
 
-            {/* Document Verification */}
+            {/* Document Verification — Clickable with Preview */}
             <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <FileText size={18} /> Document Verification
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {["adangal", "incomeCertificate", "aadhaar", "pan", "photo"].map(docType => (
-                        <div key={docType} className={`p-3 rounded-xl text-center
-                            ${loan.documentPaths?.[docType] ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                            <p className="text-sm font-semibold capitalize">{docType}</p>
-                            <p className={`text-xs mt-1 ${loan.documentPaths?.[docType] ? "text-green-700" : "text-red-700"}`}>
-                                {loan.documentPaths?.[docType] ? "✅ Uploaded" : "❌ Missing"}
-                            </p>
-                        </div>
-                    ))}
+                    {["adangal", "incomeCertificate", "aadhaar", "pan", "photo"].map(docType => {
+                        const filename = loan.documentPaths?.[docType];
+                        const hasDoc = !!filename;
+                        return (
+                            <div
+                                key={docType}
+                                onClick={() => hasDoc && openDocPreview(docType, filename)}
+                                className={`p-3 rounded-xl text-center transition-all
+                                    ${hasDoc
+                                        ? "bg-green-50 border border-green-200 cursor-pointer hover:shadow-md hover:bg-green-100"
+                                        : "bg-red-50 border border-red-200"}`}
+                            >
+                                <p className="text-sm font-semibold">{docLabels[docType] || docType}</p>
+                                <p className={`text-xs mt-1 ${hasDoc ? "text-green-700" : "text-red-700"}`}>
+                                    {hasDoc ? "✅ Uploaded" : "❌ Missing"}
+                                </p>
+                                {hasDoc && (
+                                    <div className="mt-2 flex items-center justify-center gap-1 text-green-600 text-xs font-semibold">
+                                        <Eye size={12} /> Click to View
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -307,6 +359,60 @@ const ManagerLoanDetail = () => {
                         </button>
                     </div>
                 </Modal>
+            )}
+
+            {/* ================= DOCUMENT PREVIEW MODAL ================= */}
+            {previewDoc && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+                    onClick={() => { if (previewDoc.blobUrl) window.URL.revokeObjectURL(previewDoc.blobUrl); setPreviewDoc(null); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden"
+                        onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <FileText size={18} />
+                                {docLabels[previewDoc.name] || previewDoc.name}
+                            </h3>
+                            <button
+                                onClick={() => { if (previewDoc.blobUrl) window.URL.revokeObjectURL(previewDoc.blobUrl); setPreviewDoc(null); }}
+                                className="p-2 hover:bg-gray-200 rounded-full transition"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4 flex items-center justify-center overflow-auto"
+                            style={{ maxHeight: "calc(90vh - 80px)" }}>
+                            {isImage(previewDoc.filename, previewDoc.mimeType) ? (
+                                <img
+                                    src={previewDoc.blobUrl}
+                                    alt={previewDoc.name}
+                                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow"
+                                />
+                            ) : isPdf(previewDoc.filename, previewDoc.mimeType) ? (
+                                <iframe
+                                    src={previewDoc.blobUrl}
+                                    title={previewDoc.name}
+                                    className="w-full rounded-lg"
+                                    style={{ height: "70vh" }}
+                                />
+                            ) : (
+                                <div className="text-center py-10 text-gray-500">
+                                    <FileText size={48} className="mx-auto mb-4 text-gray-400" />
+                                    <p>Preview not available for this file type.</p>
+                                    <a
+                                        href={previewDoc.blobUrl}
+                                        download={previewDoc.filename}
+                                        className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg"
+                                    >
+                                        Download File
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

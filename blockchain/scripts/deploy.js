@@ -3,17 +3,50 @@ const fs = require("fs");
 const path = require("path");
 
 async function main() {
-    console.log("🚀 Deploying LoanManagement contract...");
+    console.log("🚀 Checking/Deploying LoanManagement contract...");
 
     const [deployer] = await ethers.getSigners();
     console.log("📍 Deployer address:", deployer.address);
 
-    const LoanManagement = await ethers.getContractFactory("LoanManagement");
-    const contract = await LoanManagement.deploy();
-    await contract.waitForDeployment();
+    const deploymentPath = path.join(__dirname, "../deployment.json");
+    let contractAddress;
+    let alreadyDeployed = false;
 
-    const contractAddress = await contract.getAddress();
-    console.log("✅ LoanManagement deployed to:", contractAddress);
+    // Check if contract already exists at the saved address
+    if (fs.existsSync(deploymentPath)) {
+        try {
+            const deploymentData = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+            const existingAddress = deploymentData.address;
+
+            // Check if there is code at this address on the current network
+            const code = await ethers.provider.getCode(existingAddress);
+            if (code !== "0x") {
+                console.log(`✅ Contract already exists at ${existingAddress}. Skipping deployment.`);
+                contractAddress = existingAddress;
+                alreadyDeployed = true;
+            } else {
+                console.log("⚠️  Saved address found but no code detected. Redeploying...");
+            }
+        } catch (e) {
+            console.log("⚠️  Error reading deployment.json, will deploy fresh.");
+        }
+    }
+
+    if (!alreadyDeployed) {
+        // Deterministic address check for fresh Hardhat node
+        const nonce = await deployer.getNonce();
+        const EXPECTED_FIRST_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+        if (nonce === 0) {
+            console.log("✨ Fresh node detected (nonce=0).");
+        }
+
+        const LoanManagement = await ethers.getContractFactory("LoanManagement");
+        const contract = await LoanManagement.deploy();
+        await contract.waitForDeployment();
+        contractAddress = await contract.getAddress();
+        console.log("✅ LoanManagement deployed to:", contractAddress);
+    }
 
     // Save contract address and ABI for backend use
     const deploymentInfo = {
@@ -25,11 +58,11 @@ async function main() {
 
     // Save to blockchain directory
     fs.writeFileSync(
-        path.join(__dirname, "../deployment.json"),
+        deploymentPath,
         JSON.stringify(deploymentInfo, null, 2)
     );
 
-    // Copy ABI to backend for use
+    // Copy ABI and Address to backend for use
     const artifactPath = path.join(
         __dirname,
         "../artifacts/contracts/LoanManagement.sol/LoanManagement.json"
@@ -52,11 +85,11 @@ async function main() {
             JSON.stringify({ abi: artifact.abi, address: contractAddress }, null, 2)
         );
 
-        console.log("📄 ABI + Address saved to backend_loan/contracts/");
+        console.log("📄 ABI + Address synchronized with backend_loan/contracts/");
     }
 
-    console.log("\n🎉 Deployment complete!");
-    console.log("Contract Address:", contractAddress);
+    console.log("\n🎉 Deployment check complete!");
+    console.log("Current Contract Address:", contractAddress);
 }
 
 main()

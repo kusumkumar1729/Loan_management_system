@@ -7,8 +7,7 @@ import {
 } from "recharts";
 import {
     Users, CheckCircle, XCircle, Clock, IndianRupee,
-    Link as LinkIcon, Eye, AlertTriangle, TrendingUp,
-    Shield
+    Link as LinkIcon, Eye, Shield
 } from "lucide-react";
 
 const COLORS = ["#16a34a", "#dc2626", "#eab308", "#3b82f6", "#8b5cf6"];
@@ -225,7 +224,7 @@ const ManagerDashboard = () => {
                             {blockchainTxs.length === 0 ? (
                                 <tr>
                                     <td colSpan="4" className="text-center py-8 text-gray-400">
-                                        No blockchain transactions yet. Approve/Reject a loan to create transactions.
+                                        No blockchain transactions yet. Apply for a loan to create on-chain records.
                                     </td>
                                 </tr>
                             ) : (
@@ -237,7 +236,8 @@ const ManagerDashboard = () => {
                                                 ${tx.action === "APPROVED" ? "bg-green-100 text-green-700"
                                                     : tx.action === "REJECTED" ? "bg-red-100 text-red-700"
                                                         : tx.action === "EMI_PAID" ? "bg-blue-100 text-blue-700"
-                                                            : "bg-gray-100 text-gray-700"}`}>
+                                                            : tx.action === "CREATED" ? "bg-teal-100 text-teal-700"
+                                                                : "bg-gray-100 text-gray-700"}`}>
                                                 {tx.action}
                                             </span>
                                         </td>

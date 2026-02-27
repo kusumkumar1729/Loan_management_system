@@ -65,10 +65,28 @@ class BlockchainService {
                 loanType
             );
             const receipt = await tx.wait();
-            console.log("✅ Loan created on chain. Tx:", receipt.hash);
+
+            // Extract loanId from events
+            let loanId = null;
+            if (receipt.logs) {
+                for (const log of receipt.logs) {
+                    try {
+                        const parsedLog = this.contract.interface.parseLog(log);
+                        if (parsedLog && parsedLog.name === "LoanCreated") {
+                            loanId = parsedLog.args.loanId.toString();
+                            break;
+                        }
+                    } catch (e) {
+                        // Skip logs that don't belong to this contract or don't match
+                    }
+                }
+            }
+
+            console.log(`✅ Loan created on chain. ID: ${loanId}, Tx: ${receipt.hash}`);
             return {
                 txHash: receipt.hash,
                 blockNumber: receipt.blockNumber,
+                loanId: loanId,
             };
         } catch (error) {
             console.error("❌ Blockchain createLoan error:", error.message);

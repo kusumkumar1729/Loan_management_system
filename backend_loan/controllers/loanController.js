@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const { validationResult } = require("express-validator");
 const transporter = require("../utils/mailer");
+const blockchainService = require("../services/blockchainService");
 
 /* =========================================================
    APPLY FOR LOAN
@@ -192,6 +193,26 @@ const applyForLoan = async (req, res) => {
         await session.commitTransaction();
         session.endSession();
 
+        /* ================= BLOCKCHAIN STORAGE ================= */
+        try {
+            const bcResult = await blockchainService.createLoanOnChain(
+                fullName,
+                applicationNumber,
+                Math.round(Number(loanAmount)),
+                Number(creditScore),
+                loanType
+            );
+
+            if (bcResult && bcResult.loanId) {
+                loan[0].blockchainTxHash = bcResult.txHash;
+                loan[0].blockchainLoanId = bcResult.loanId;
+                await loan[0].save();
+                console.log(`⛓️  Loan ${applicationNumber} recorded on blockchain. ID: ${bcResult.loanId}, Tx: ${bcResult.txHash}`);
+            }
+        } catch (bcError) {
+            console.error("Blockchain error (non-fatal):", bcError.message);
+        }
+
         /* ================= AUDIT LOG ================= */
         try {
             await AuditLog.create({
@@ -200,7 +221,13 @@ const applyForLoan = async (req, res) => {
                 performedByRole: "user",
                 targetLoan: loan[0]._id,
                 details: `Application ${applicationNumber} submitted. Amount: ₹${loanAmount}`,
-                metadata: { mlApprovedAmount: approvedAmount, riskLevel, fraudScore },
+                metadata: {
+                    mlApprovedAmount: approvedAmount,
+                    riskLevel,
+                    fraudScore,
+                    blockchainTxHash: loan[0].blockchainTxHash || "",
+                    blockchainLoanId: loan[0].blockchainLoanId || "",
+                },
             });
 
             await AuditLog.create({
@@ -225,6 +252,7 @@ const applyForLoan = async (req, res) => {
                     <p>Application No: <strong>${applicationNumber}</strong></p>
                     <p>Amount Requested: <strong>₹${Number(loanAmount).toLocaleString()}</strong></p>
                     <p>ML Recommended Amount: <strong>₹${approvedAmount.toLocaleString()}</strong></p>
+                    ${loan[0].blockchainTxHash ? `<p>Blockchain Tx: <code>${loan[0].blockchainTxHash}</code></p>` : ""}
                     <p>Your application is now under review by the Bank Manager.</p>
                 `,
             })

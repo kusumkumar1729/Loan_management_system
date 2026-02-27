@@ -155,27 +155,32 @@ const approveLoan = async (req, res) => {
 
         // Store on blockchain
         let blockchainResult = null;
+        let bcLoanId = loan.blockchainLoanId;
+
         try {
-            // First create the loan on-chain
-            const createResult = await blockchainService.createLoanOnChain(
-                loan.fullName,
-                loan.applicationNumber,
-                Math.round(P),
-                loan.creditScore,
-                loan.loanType
-            );
-
-            if (createResult) {
-                // Get the blockchain loan ID (it's the current loan count)
-                const bcLoanId = await blockchainService.getLoanCount();
-
-                // Then approve it
-                blockchainResult = await blockchainService.approveLoanOnChain(
-                    bcLoanId,
-                    Math.round((interestRate || 8.5) * 100) // basis points
+            // First create the loan on-chain if not already created
+            if (!bcLoanId) {
+                const createResult = await blockchainService.createLoanOnChain(
+                    loan.fullName,
+                    loan.applicationNumber,
+                    Math.round(P),
+                    loan.creditScore,
+                    loan.loanType
                 );
 
-                loan.blockchainLoanId = bcLoanId.toString();
+                if (createResult && createResult.loanId) {
+                    bcLoanId = createResult.loanId;
+                    loan.blockchainLoanId = bcLoanId;
+                    // We can also store the creation hash if we want, but let's keep it consistent
+                }
+            }
+
+            if (bcLoanId) {
+                // Then approve it
+                blockchainResult = await blockchainService.approveLoanOnChain(
+                    parseInt(bcLoanId),
+                    Math.round((interestRate || 8.5) * 100) // basis points
+                );
             }
         } catch (bcError) {
             console.error("Blockchain error (non-fatal):", bcError.message);
@@ -250,22 +255,29 @@ const rejectLoan = async (req, res) => {
 
         // Log rejection on blockchain
         let blockchainResult = null;
-        try {
-            const createResult = await blockchainService.createLoanOnChain(
-                loan.fullName,
-                loan.applicationNumber,
-                Math.round(loan.loanAmount),
-                loan.creditScore,
-                loan.loanType
-            );
+        let bcLoanId = loan.blockchainLoanId;
 
-            if (createResult) {
-                const bcLoanId = await blockchainService.getLoanCount();
+        try {
+            if (!bcLoanId) {
+                const createResult = await blockchainService.createLoanOnChain(
+                    loan.fullName,
+                    loan.applicationNumber,
+                    Math.round(loan.loanAmount),
+                    loan.creditScore,
+                    loan.loanType
+                );
+
+                if (createResult && createResult.loanId) {
+                    bcLoanId = createResult.loanId;
+                    loan.blockchainLoanId = bcLoanId;
+                }
+            }
+
+            if (bcLoanId) {
                 blockchainResult = await blockchainService.rejectLoanOnChain(
-                    bcLoanId,
+                    parseInt(bcLoanId),
                     rejectionReason || "Rejected by Bank Manager"
                 );
-                loan.blockchainLoanId = bcLoanId.toString();
             }
         } catch (bcError) {
             console.error("Blockchain error (non-fatal):", bcError.message);
@@ -445,6 +457,30 @@ const getBlockchainTransactions = async (req, res) => {
     }
 };
 
+/* =========================================================
+   📄 GET DOCUMENT FILE (for admin/manager viewing)
+========================================================= */
+const getManagerDocument = async (req, res) => {
+    try {
+        const filename = req.params.filename;
+
+        if (!filename || filename.includes("..") || filename.includes("/")) {
+            return res.status(400).json({ message: "Invalid filename" });
+        }
+
+        const filePath = path.join(__dirname, "../uploads", filename);
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        res.sendFile(filePath);
+    } catch (error) {
+        console.error("Document access error:", error);
+        res.status(500).json({ message: "File access error" });
+    }
+};
+
 module.exports = {
     getManagerDashboard,
     getLoans,
@@ -453,4 +489,5 @@ module.exports = {
     rejectLoan,
     generateLoanPDF,
     getBlockchainTransactions,
+    getManagerDocument,
 };
