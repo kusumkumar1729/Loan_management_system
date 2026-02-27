@@ -4,6 +4,7 @@ const { protect } = require("../middleware/authMiddleware");
 const { admin } = require("../middleware/adminMiddleware");
 const Loan = require("../models/Loan");
 const User = require("../models/User");
+const blockchainService = require("../services/blockchainService");
 
 /* =========================================================
    📊 Admin Dashboard Analytics
@@ -118,6 +119,61 @@ router.get("/users", protect, admin, async (req, res) => {
         res.json(users);
     } catch (error) {
         res.status(500).json({ message: "Server Error" });
+    }
+});
+
+/* =========================================================
+   ⛓️ Blockchain Transactions
+   @route   GET /api/admin/blockchain/transactions
+   @access  Private/Admin
+========================================================= */
+router.get("/blockchain/transactions", protect, admin, async (req, res) => {
+    try {
+        if (!blockchainService.isReady()) {
+            // Try to initialize if not ready
+            await blockchainService.initialize();
+        }
+
+        if (!blockchainService.isReady()) {
+            return res.json([]); // Return empty if blockchain unavailable
+        }
+
+        const transactions = await blockchainService.getTransactionHistory();
+        res.json(transactions);
+    } catch (error) {
+        console.error("Admin blockchain transactions error:", error);
+        res.status(500).json({ message: "Failed to fetch blockchain transactions" });
+    }
+});
+
+/* =========================================================
+   ⛓️ Blockchain Status
+   @route   GET /api/admin/blockchain/status
+   @access  Private/Admin
+========================================================= */
+router.get("/blockchain/status", protect, admin, async (req, res) => {
+    try {
+        if (!blockchainService.isReady()) {
+            await blockchainService.initialize();
+        }
+
+        const ready = blockchainService.isReady();
+        let txCount = 0;
+        let loanCount = 0;
+
+        if (ready) {
+            txCount = await blockchainService.getTransactionCount();
+            loanCount = await blockchainService.getLoanCount();
+        }
+
+        res.json({
+            connected: ready,
+            transactionCount: txCount,
+            loanCount: loanCount,
+        });
+    } catch (error) {
+        console.error("Blockchain status error:", error);
+        res.json({ connected: false, transactionCount: 0, loanCount: 0 });
     }
 });
 

@@ -116,18 +116,12 @@ const LoanApplication = () => {
                 else data.append(key, formData[key]);
             });
 
-            // Append Files (Only if isFirstTime)
-            if (isFirstTime) {
-                Object.keys(files).forEach(key => {
-                    if (files[key]) {
-                        data.append(key, files[key]);
-                    }
-                });
-            } else {
-                // Even if not first time, if user uploaded something, maybe send it?
-                // But logic says we reuse docs. 
-                // Current logic: if isFirstTime is false, backend uses existing docs.
-            }
+            // Append Files (always upload documents)
+            Object.keys(files).forEach(key => {
+                if (files[key]) {
+                    data.append(key, files[key]);
+                }
+            });
 
             // Calculate Logical Credit Score instead of random
             const calculateCreditScore = () => {
@@ -185,7 +179,7 @@ const LoanApplication = () => {
     if (checkingLoans)
         return <div className="text-center py-20">Checking...</div>;
 
-    const totalSteps = isFirstTime ? 5 : 4;
+    const totalSteps = 5;
 
     return (
         <div className="page-bg min-h-[calc(100vh-64px)] py-12 px-4 animate-fadeIn">
@@ -258,7 +252,7 @@ const LoanApplication = () => {
                 )}
 
                 {/* STEP 5: DOCUMENTS (Only if First Time) */}
-                {step === 5 && isFirstTime && (
+                {step === 5 && (
                     <Section icon={<UploadCloud />} title="Document Uploads">
                         <div className="col-span-1 md:col-span-2 text-sm text-yellow-700 bg-yellow-50 p-4 rounded-lg mb-4 flex items-start gap-2">
                             <AlertCircle size={20} />

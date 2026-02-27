@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AdminAPI from "../adminApi";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, RefreshCw, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 
 const AdminDashboard = () => {
     const [summary, setSummary] = useState({
@@ -13,29 +13,51 @@ const AdminDashboard = () => {
 
     const [loans, setLoans] = useState([]);
     const [blockchainTxs, setBlockchainTxs] = useState([]);
+    const [blockchainStatus, setBlockchainStatus] = useState({
+        connected: false,
+        transactionCount: 0,
+        loanCount: 0,
+    });
+    const [blockchainError, setBlockchainError] = useState("");
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         fetchData();
     }, []);
 
     const fetchData = async () => {
+        setRefreshing(true);
+        setBlockchainError("");
+
         try {
-            const summaryRes = await AdminAPI.get("/admin/analytics");
-            const loansRes = await AdminAPI.get("/admin/loans");
+            const [summaryRes, loansRes] = await Promise.all([
+                AdminAPI.get("/admin/analytics"),
+                AdminAPI.get("/admin/loans"),
+            ]);
 
             setSummary(summaryRes.data);
             setLoans(loansRes.data);
-
-            // Fetch blockchain transactions
-            try {
-                const txRes = await AdminAPI.get("/manager/blockchain/transactions");
-                setBlockchainTxs(txRes.data);
-            } catch (e) {
-                console.warn("Blockchain transactions not available");
-            }
         } catch (error) {
             console.error("Admin fetch error:", error);
         }
+
+        // Fetch blockchain data separately so loan data still shows even if blockchain fails
+        try {
+            const [txRes, statusRes] = await Promise.all([
+                AdminAPI.get("/admin/blockchain/transactions"),
+                AdminAPI.get("/admin/blockchain/status"),
+            ]);
+            setBlockchainTxs(txRes.data);
+            setBlockchainStatus(statusRes.data);
+            setBlockchainError("");
+        } catch (e) {
+            console.warn("Blockchain data fetch error:", e);
+            setBlockchainError(
+                e.response?.data?.message || "Could not connect to blockchain service"
+            );
+        }
+
+        setRefreshing(false);
     };
 
     /* ================= RISK DISTRIBUTION ================= */
@@ -55,7 +77,18 @@ const AdminDashboard = () => {
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
+            <div className="flex items-center justify-between mb-8">
+                <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+                <button
+                    onClick={fetchData}
+                    disabled={refreshing}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg
+                               hover:bg-indigo-700 transition disabled:opacity-50"
+                >
+                    <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+                    {refreshing ? "Refreshing..." : "Refresh"}
+                </button>
+            </div>
 
             {/* ================= TOP CARDS ================= */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
@@ -95,13 +128,28 @@ const AdminDashboard = () => {
                     </div>
                 </div>
 
-                {/* BLOCKCHAIN TX COUNT */}
-                <div className="bg-indigo-50 shadow rounded-xl p-6">
+                {/* BLOCKCHAIN STATUS */}
+                <div className={`shadow rounded-xl p-6 ${blockchainStatus.connected ? 'bg-indigo-50' : 'bg-red-50'}`}>
                     <h3 className="text-gray-500 text-sm flex items-center gap-1">
                         <LinkIcon size={14} /> BLOCKCHAIN
                     </h3>
-                    <h2 className="text-3xl font-bold text-indigo-700">{blockchainTxs.length}</h2>
+                    <h2 className="text-3xl font-bold text-indigo-700">
+                        {blockchainStatus.transactionCount || blockchainTxs.length}
+                    </h2>
                     <p className="text-gray-500 text-sm">On-chain transactions</p>
+                    <div className="flex items-center gap-1 mt-2">
+                        {blockchainStatus.connected ? (
+                            <>
+                                <CheckCircle size={14} className="text-green-600" />
+                                <span className="text-xs text-green-600 font-medium">Connected</span>
+                            </>
+                        ) : (
+                            <>
+                                <XCircle size={14} className="text-red-500" />
+                                <span className="text-xs text-red-500 font-medium">Disconnected</span>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -168,9 +216,30 @@ const AdminDashboard = () => {
 
             {/* ================= BLOCKCHAIN TRANSACTIONS ================= */}
             <div className="bg-white shadow rounded-xl p-6">
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                    <LinkIcon size={20} /> Blockchain Transactions
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <LinkIcon size={20} /> Blockchain Transactions
+                    </h2>
+                    {blockchainStatus.connected && (
+                        <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">
+                            {blockchainStatus.loanCount} loans on-chain
+                        </span>
+                    )}
+                </div>
+
+                {/* Blockchain Error Banner */}
+                {blockchainError && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-lg mb-4
+                                    flex items-center gap-2 text-sm">
+                        <AlertTriangle size={16} />
+                        <span>
+                            {blockchainError} — Make sure the Hardhat node is running
+                            (<code className="bg-amber-100 px-1 rounded">npx hardhat node</code>)
+                            and the contract is deployed.
+                        </span>
+                    </div>
+                )}
+
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="border-b bg-gray-50">
@@ -185,7 +254,9 @@ const AdminDashboard = () => {
                             {blockchainTxs.length === 0 ? (
                                 <tr>
                                     <td colSpan="4" className="text-center py-8 text-gray-400">
-                                        No blockchain transactions yet.
+                                        {blockchainError
+                                            ? "Cannot load blockchain transactions."
+                                            : "No blockchain transactions yet."}
                                     </td>
                                 </tr>
                             ) : (

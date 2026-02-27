@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 async function main() {
-    console.log("🚀 Checking/Deploying LoanManagement contract...");
+    console.log("🚀 Deploying LoanManagement contract...");
 
     const [deployer] = await ethers.getSigners();
     console.log("📍 Deployer address:", deployer.address);
@@ -25,7 +25,7 @@ async function main() {
                 contractAddress = existingAddress;
                 alreadyDeployed = true;
             } else {
-                console.log("⚠️  Saved address found but no code detected. Redeploying...");
+                console.log("⚠️  Saved address found but no code detected (node restarted?). Redeploying...");
             }
         } catch (e) {
             console.log("⚠️  Error reading deployment.json, will deploy fresh.");
@@ -33,14 +33,6 @@ async function main() {
     }
 
     if (!alreadyDeployed) {
-        // Deterministic address check for fresh Hardhat node
-        const nonce = await deployer.getNonce();
-        const EXPECTED_FIRST_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-        if (nonce === 0) {
-            console.log("✨ Fresh node detected (nonce=0).");
-        }
-
         const LoanManagement = await ethers.getContractFactory("LoanManagement");
         const contract = await LoanManagement.deploy();
         await contract.waitForDeployment();
@@ -48,7 +40,7 @@ async function main() {
         console.log("✅ LoanManagement deployed to:", contractAddress);
     }
 
-    // Save contract address and ABI for backend use
+    // Save contract address for blockchain directory
     const deploymentInfo = {
         address: contractAddress,
         deployer: deployer.address,
@@ -56,7 +48,6 @@ async function main() {
         deployedAt: new Date().toISOString(),
     };
 
-    // Save to blockchain directory
     fs.writeFileSync(
         deploymentPath,
         JSON.stringify(deploymentInfo, null, 2)
@@ -88,8 +79,9 @@ async function main() {
         console.log("📄 ABI + Address synchronized with backend_loan/contracts/");
     }
 
-    console.log("\n🎉 Deployment check complete!");
+    console.log("\n🎉 Deployment complete!");
     console.log("Current Contract Address:", contractAddress);
+    console.log("\n⚠️  IMPORTANT: Restart your backend server (npm start) to pick up the new address.");
 }
 
 main()
